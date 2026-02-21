@@ -40,6 +40,26 @@ $app->get("/hello/{name}", function(string $name) {
 $app->run();
 ```
 
+## WebSocket Support
+
+Fastor makes WebSocket development as simple as HTTP.
+
+```php
+<?php
+
+$app = app();
+
+$app->websocket('/ws', function($frame) {
+    if ($frame->data === 'ping') {
+        return 'pong';
+    }
+});
+
+$app->run();
+```
+
+Run your app normally with `./fastor start`.
+
 Run your app:
 
 ```bash
@@ -50,6 +70,6 @@ Run your app:
 
 Visit [localhost:8000/docs](http://localhost:8000/docs) after starting your app to see the automatic Swagger documentation.
 
-## License
+## License 
 
 MIT
