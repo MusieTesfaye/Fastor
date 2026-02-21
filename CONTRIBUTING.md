@@ -16,7 +16,6 @@ If you discover a bug in Fastor, please open an issue on the GitHub repository. 
 
 ## Security Vulnerabilities
 
-If you discover a security vulnerability within Fastor, please send an email to the Fastor team at security@fastor.io. All security vulnerabilities will be promptly addressed.
 
 ## Coding Standards
 
