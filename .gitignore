@@ -1,0 +1,7 @@
+vendor/
+composer.lock
+fastor
+test_output.txt
+.env
+.php-cs-fixer.cache
+.phpunit.result.cache
