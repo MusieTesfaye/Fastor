@@ -3,39 +3,28 @@
 namespace Fastor\Auth;
 
 use Fastor\Http\Request;
+use Fastor\Exceptions\HttpException;
 
 class ApiKey
 {
-    private string $name;
-    private string $in; // 'header' or 'query'
-
-    public function __construct(string $name = 'X-API-Key', string $in = 'header')
-    {
-        $this->name = $name;
-        $this->in = $in;
-    }
+    public function __construct(
+        private string $name = 'api_key',
+        private string $in = 'header' // 'header' or 'query'
+    ) {}
 
     /**
-     * Validate the key against a known value or callback.
+     * Extracts an API key from header or query.
      */
-    public function handle(Request $request, string|callable $validator): string
+    public function __invoke(Request $request): string
     {
-        $key = ($this->in === 'header') 
+        $val = $this->in === 'header' 
             ? $request->header($this->name) 
             : $request->query($this->name);
 
-        if (!$key) {
-            throw new \Fastor\Exceptions\HttpException(401, "Missing API Key ({$this->name} in {$this->in})");
+        if (!$val) {
+            throw new HttpException(401, "Missing API Key ({$this->name} in {$this->in})");
         }
 
-        if (is_callable($validator)) {
-            if (!$validator($key)) {
-                throw new \Fastor\Exceptions\HttpException(401, "Invalid API Key");
-            }
-        } elseif ($key !== $validator) {
-            throw new \Fastor\Exceptions\HttpException(401, "Invalid API Key");
-        }
-
-        return $key;
+        return $val;
     }
 }

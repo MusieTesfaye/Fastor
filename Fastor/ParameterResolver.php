@@ -133,16 +133,21 @@ class ParameterResolver
             return new Broadcast($this->server);
         }
 
-        // 4.8 Auth Drivers
-        if ($typeName === 'Fastor\Auth\JWT') {
-            return new \Fastor\Auth\JWT();
-        }
-        if ($typeName === 'Fastor\Auth\ApiKey') {
-            return new \Fastor\Auth\ApiKey();
-        }
+        // Deprecated hardcoded drivers removed in favor of generic dependencies
 
-        // 5. Check for DTO (any class type-hint)
+        // 5. Try resolving as a Dependency (Auto-wiring) or DTO
         if ($typeName && class_exists($typeName) && !str_starts_with($typeName, 'OpenSwoole\\') && !str_starts_with($typeName, 'Fastor\\')) {
+            // If it's registered or has a constructor, try auto-wiring first
+            $app = App::getInstance();
+            if ($app->getFactory($typeName) || (new \ReflectionClass($typeName))->getConstructor() !== null) {
+                try {
+                    return $this->resolveDependency($typeName, $request);
+                } catch (\Throwable $e) {
+                    // If auto-wiring fails, it might be intended as a DTO (e.g. constructor params are not services)
+                    // Fallback to DTO mapping
+                }
+            }
+            
             return $this->resolveDTO($typeName, $request);
         }
 
@@ -191,16 +196,56 @@ class ParameterResolver
         }
     }
 
-    private function resolveDependency(string $name, $request): mixed
+    public function resolveDependency(string $name, $request): mixed
     {
         $app = \Fastor\App::getInstance();
-        $factory = $app->getFactory($name);
         
-        if ($factory) {
-            return $factory($request);
+        // 1. Check for already resolved instance (singleton)
+        if ($instance = $app->getDependency($name)) {
+            return $instance;
         }
 
-        throw new HttpException(500, "Dependency '$name' not found");
+        // 2. Check for manual factory
+        $factory = $app->getFactory($name);
+        if ($factory) {
+            $instance = $factory($request);
+            $app->setDependency($name, $instance);
+            return $instance;
+        }
+
+        // 3. Auto-wiring for concrete classes
+        if (class_exists($name)) {
+            $reflection = new \ReflectionClass($name);
+            if (!$reflection->isInstantiable()) {
+                throw new HttpException(500, "Dependency '$name' is not a registered factory and is not instantiable.");
+            }
+
+            $constructor = $reflection->getConstructor();
+            if (!$constructor) {
+                $instance = new $name();
+                $app->setDependency($name, $instance);
+                return $instance;
+            }
+
+            $params = $constructor->getParameters();
+            $args = [];
+            foreach ($params as $param) {
+                $paramType = $param->getType();
+                if ($paramType instanceof \ReflectionNamedType && !$paramType->isBuiltin()) {
+                    $args[] = $this->resolveDependency($paramType->getName(), $request);
+                } elseif ($param->isDefaultValueAvailable()) {
+                    $args[] = $param->getDefaultValue();
+                } else {
+                    throw new HttpException(500, "Unresolved dependency '{$param->getName()}' in constructor of $name");
+                }
+            }
+
+            $instance = $reflection->newInstanceArgs($args);
+            $app->setDependency($name, $instance);
+            return $instance;
+        }
+
+        throw new HttpException(500, "Dependency '$name' not found and cannot be auto-wired.");
     }
 
     private function castValue($value, ?string $type): mixed

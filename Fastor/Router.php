@@ -165,8 +165,10 @@ class Router
                 // Attach options to request for middleware access
                 $request->setAttribute('route_options', $options);
                 
-                $coreHandler = function ($request) use ($handlerInfo, $vars, $response, $resolver, $server) {
-                    return $this->resolveAndCall($handlerInfo['handler'], $vars, $request, $response, $resolver, $server);
+                $metadata = ReflectionCache::getHandlerMetadata($handlerInfo['handler']);
+                
+                $coreHandler = function ($request) use ($handlerInfo, $vars, $response, $resolver, $server, $metadata) {
+                    return $this->resolveAndCall($handlerInfo['handler'], $vars, $request, $response, $resolver, $server, $metadata);
                 };
 
                 if (isset($this->routeMiddleware[$index])) {
@@ -216,22 +218,38 @@ class Router
         return null;
     }
 
-    private function resolveAndCall($handler, array $pathVars, $request, Response $response, ParameterResolver $resolver, ?SwooleServer $server = null): mixed
+    private function resolveAndCall($handler, array $pathVars, $request, Response $response, ParameterResolver $resolver, ?SwooleServer $server = null, ?array $metadata = null): mixed
     {
         $resolver->setResponse($response);
+        $metadata ??= ReflectionCache::getHandlerMetadata($handler);
         $args = $resolver->resolve($handler, $pathVars, $request);
 
+        $result = null;
         if (is_callable($handler)) {
-            return call_user_func_array($handler, $args);
-        }
-
-        // Handle class string handlers (e.g. Controller@method)
-        if (is_string($handler) && str_contains($handler, '@')) {
+            $result = call_user_func_array($handler, $args);
+        } elseif (is_string($handler) && str_contains($handler, '@')) {
             [$class, $method] = explode('@', $handler);
             $instance = new $class();
-            return call_user_func_array([$instance, $method], $args);
+            $result = call_user_func_array([$instance, $method], $args);
+        } else {
+            throw new \Exception('Invalid handler', 500);
         }
 
-        throw new \Exception('Invalid handler', 500);
+        // 1. Response Validation (via Attribute)
+        foreach ($metadata['attributes'] as $attr) {
+            if ($attr instanceof \Fastor\Attributes\Response) {
+                $mapper = App::getInstance()->getMapper();
+                return $mapper->map($attr->model, $result);
+            }
+        }
+
+        // 2. Response Validation (via return type hint)
+        $returnType = $metadata['return_type'] ?? null;
+        if ($returnType && class_exists($returnType) && !str_starts_with($returnType, 'Fastor\\') && !str_starts_with($returnType, 'OpenSwoole\\')) {
+            $mapper = App::getInstance()->getMapper();
+            return $mapper->map($returnType, $result);
+        }
+
+        return $result;
     }
 }

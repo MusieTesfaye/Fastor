@@ -8,14 +8,25 @@ namespace Fastor;
  */
 class ReflectionCache
 {
+    private static array $reflections = [];
     private static array $handlers = [];
     private static array $classes = [];
+    private static array $properties = [];
 
     public static function getHandlerMetadata(callable|string|array $handler): array
     {
         $key = self::getHandlerKey($handler);
+        
+        // Local process cache (fastest, supports objects)
         if (isset(self::$handlers[$key])) {
             return self::$handlers[$key];
+        }
+
+        // Persistent cache (slower, but survives restarts/workers)
+        $cache = App::getInstance()->getCache();
+        $cached = $cache->get("handler_meta_$key");
+        if ($cached) {
+            return self::$handlers[$key] = $cached;
         }
 
         $reflection = self::reflect($handler);
@@ -31,10 +42,24 @@ class ReflectionCache
             ];
         }
 
-        return self::$handlers[$key] = [
-            'reflection' => $reflection,
-            'params' => $params
+        $metadata = [
+            'params' => $params,
+            'return_type' => $reflection->getReturnType() instanceof \ReflectionNamedType ? $reflection->getReturnType()->getName() : null,
+            'attributes' => self::extractHandlerAttributes($reflection)
         ];
+
+        $cache->set("handler_meta_$key", $metadata);
+        
+        // Store reflection object locally only
+        self::$reflections["ref_$key"] = $reflection;
+
+        return self::$handlers[$key] = $metadata;
+    }
+
+    public static function getHandlerReflection(callable|string|array $handler): \ReflectionFunction|\ReflectionMethod
+    {
+        $key = self::getHandlerKey($handler);
+        return self::$reflections["ref_$key"] ??= self::reflect($handler);
     }
 
     public static function getClassMetadata(string $className): array
@@ -43,8 +68,15 @@ class ReflectionCache
             return self::$classes[$className];
         }
 
+        $cache = App::getInstance()->getCache();
+        $cached = $cache->get("class_meta_$className");
+        if ($cached) {
+            return self::$classes[$className] = $cached;
+        }
+
         $reflection = new \ReflectionClass($className);
         $properties = [];
+        $propertyAttributes = [];
         
         // Constructor params (for DTOs)
         $constructor = $reflection->getConstructor();
@@ -54,15 +86,27 @@ class ReflectionCache
             }
         }
 
-        // Public properties
+        // Public properties & their validation attributes
         foreach ($reflection->getProperties(\ReflectionProperty::IS_PUBLIC) as $prop) {
-            $properties[] = $prop->getName();
+            $propName = $prop->getName();
+            $properties[] = $propName;
+            
+            $attrs = [];
+            foreach ($prop->getAttributes() as $attr) {
+                $attrs[] = $attr->newInstance();
+            }
+            $propertyAttributes[$propName] = $attrs;
         }
 
-        return self::$classes[$className] = [
+        $metadata = [
             'properties' => array_unique($properties),
+            'property_attributes' => $propertyAttributes,
             'methods' => get_class_methods($className)
         ];
+
+        $cache->set("class_meta_$className", $metadata);
+
+        return self::$classes[$className] = $metadata;
     }
 
     private static function getHandlerKey($handler): string
@@ -95,5 +139,19 @@ class ReflectionCache
             $attrs[] = $attr->newInstance();
         }
         return $attrs;
+    }
+    private static function extractHandlerAttributes(\ReflectionFunction|\ReflectionMethod $reflection): array
+    {
+        $attrs = [];
+        foreach ($reflection->getAttributes() as $attr) {
+            $attrs[] = $attr->newInstance();
+        }
+        return $attrs;
+    }
+
+    public static function getPropertyReflection(string $className, string $propertyName): \ReflectionProperty
+    {
+        $key = "$className::$propertyName";
+        return self::$properties[$key] ??= new \ReflectionProperty($className, $propertyName);
     }
 }

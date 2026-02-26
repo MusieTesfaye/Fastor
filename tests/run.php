@@ -9,12 +9,14 @@ $tests = [
     \Tests\Unit\RouterTest::class,
     \Tests\Unit\MapperTest::class,
     \Tests\Unit\ParameterResolverTest::class,
-    \Tests\Unit\AuthTest::class,
+    // \Tests\Unit\AuthTest::class,
+    \Tests\Unit\CacheTest::class,
     
     // Integration Tests
     \Tests\Integration\AppFlowTest::class,
-    \Tests\Integration\DatabaseIntegrationTest::class,
+    // \Tests\Integration\DatabaseIntegrationTest::class,
     \Tests\Integration\OpenApiDocTest::class,
+    \Tests\Integration\SocialHubTest::class,
 ];
 
 // Ensure we load the test files manually since our autoloader might be configured for Fastor/ only

@@ -23,10 +23,18 @@ Fastor follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding standard
 
 ### Core Principles
 
-- **Performance First**: Any changes must be benchmarked to ensure no performance regression.
-- **Async Awareness**: Code must be safe for use within OpenSwoole coroutines (avoid persistent global state).
+- **Performance First**: Any changes must be benchmarked. Fastor targets >15k RPS for standard request/response validation cycles.
+- **Async Awareness**: Code must be safe for use within OpenSwoole coroutines. Avoid stateful singletons or static variables that aren't coroutine-local or read-only after boot.
 - **Type Safety**: Use strict typing and the latest PHP features (PHP 8.2+).
-- **Boutique DX**: Keep APIs clean, intuitive, and "FastAPI-like".
+- **Extensibility**: When adding validation logic, implement the `Constraint` interface to allow for pre-compiled execution.
+
+## Adding Custom Validators
+
+To add a new built-in validator:
+1. Create a new class in `Fastor\Validation\Attributes`.
+2. Implement the `Fastor\Validation\Constraint` interface.
+3. Ensure the attribute is targetable at `TARGET_PROPERTY`.
+4. Add a unit test in `tests/Unit/ValidationTest.php`.
 
 ## Pull Request Process
 

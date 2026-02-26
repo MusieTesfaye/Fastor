@@ -12,27 +12,18 @@ if (!function_exists('app')) {
     {
         return \Fastor\App::getInstance();
     }
-
-
-    /**
- * Handle a database transaction.
- */
-function transaction(?callable $callback = null): mixed
-{
-    $transaction = new \Fastor\Database\Transaction(app()->orm());
-    
-    if ($callback) {
-        try {
-            $result = $callback($transaction);
-            $transaction->run();
-            return $result;
-        } catch (\Throwable $e) {
-            throw $e;
-        }
-    }
-
-    return $transaction;
 }
+
+if (!function_exists('cache')) {
+    /**
+     * Get the Cache configurator instance.
+     *
+     * @return \Fastor\Cache\CacheConfigurator
+     */
+    function cache(): \Fastor\Cache\CacheConfigurator
+    {
+        return app()->cache();
+    }
 }
 
 if (!function_exists('env')) {

@@ -78,4 +78,14 @@ class Response
     {
         return $this->swooleResponse;
     }
+
+    public function getStatusCode(): int
+    {
+        return $this->swooleResponse->status ?? 200;
+    }
+
+    public function getContent(): string
+    {
+        return $this->swooleResponse->content ?? '';
+    }
 }

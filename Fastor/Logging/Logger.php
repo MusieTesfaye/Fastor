@@ -4,8 +4,19 @@ namespace Fastor\Logging;
 
 class Logger
 {
+    private static bool $enabled = true;
+
+    public static function disable(): void
+    {
+        self::$enabled = false;
+    }
+
     public static function log(string $level, string $message, array $context = []): void
     {
+        if (!self::$enabled) {
+            return;
+        }
+
         $log = [
             'timestamp' => date('Y-m-d\TH:i:sP'),
             'level' => strtoupper($level),
