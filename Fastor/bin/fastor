@@ -106,7 +106,7 @@ if ($cmd === 'start' || $cmd === 'run') {
     };
 
     if ($reload) {
-        $watcher = new \Fastor\HotReload\Watcher(getcwd());
+        $watcher = new \Fastor\HotReload\Watcher(getcwd(), $host, $port);
         $watcher->watch($starter);
     } else {
         try {

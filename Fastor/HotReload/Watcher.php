@@ -8,9 +8,14 @@ class Watcher
     private array $lastHashes = [];
     private $process = null;
 
-    public function __construct(string $directory)
+    private ?string $host = null;
+    private ?int $port = null;
+
+    public function __construct(string $directory, ?string $host = '0.0.0.0', ?int $port = 8000)
     {
         $this->directory = $directory;
+        $this->host = $host;
+        $this->port = $port;
     }
 
     public function watch(callable $starter): void
@@ -25,12 +30,36 @@ class Watcher
                 echo "\nChange detected! Restarting Fastor...\n";
                 $this->stopProcess();
                 
-                // Small delay to ensure OS releases the socket
-                usleep(200000); 
+                // Wait for port to be free
+                $this->waitForPortToBeFree();
+                
+                // Small extra buffer for OS cleanup
+                usleep(100000); 
                 
                 $this->startProcess($starter);
             }
         }
+    }
+
+    private function waitForPortToBeFree(): void
+    {
+        $start = microtime(true);
+        while (microtime(true) - $start < 5.0) {
+            if ($this->isPortFree()) {
+                return;
+            }
+            usleep(200000); // 200ms
+        }
+    }
+
+    private function isPortFree(): bool
+    {
+        $connection = @fsockopen($this->host, $this->port);
+        if (is_resource($connection)) {
+            fclose($connection);
+            return false;
+        }
+        return true;
     }
 
     private function startProcess(callable $starter): void
