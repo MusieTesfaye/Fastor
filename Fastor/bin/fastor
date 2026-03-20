@@ -89,6 +89,9 @@ if ($cmd === 'start' || $cmd === 'run') {
         exit(1);
     }
 
+    if (!$port) $port = (int)env('PORT', 8000);
+    if (!$host) $host = env('FASTOR_HOST', '0.0.0.0');
+
     $starter = function() use ($file, $host, $port, $mode, $env) {
         $php = PHP_BINARY;
         $execCmd = [$php, __FILE__, 'run-internal', $file, $mode];

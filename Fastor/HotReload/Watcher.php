@@ -14,8 +14,8 @@ class Watcher
     public function __construct(string $directory, ?string $host = '0.0.0.0', ?int $port = 8000)
     {
         $this->directory = $directory;
-        $this->host = $host;
-        $this->port = $port;
+        $this->host = $host ?? '0.0.0.0';
+        $this->port = $port ?? 8000;
     }
 
     public function watch(callable $starter): void
