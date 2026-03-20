@@ -71,22 +71,32 @@ class Watcher
     {
         if ($this->process && is_resource($this->process)) {
             $status = proc_get_status($this->process);
+            $pid = $status['pid'];
+
             if ($status['running']) {
-                // 1. Try SIGTERM first
+                // 1. Try to kill the process group (including all Swoole workers)
+                if (function_exists('posix_kill')) {
+                    @posix_kill(-$pid, 15); // SIGTERM to process group
+                }
+                
+                // 2. Kill the main process
                 proc_terminate($this->process, 15);
                 
-                // 2. Wait up to 2 seconds for it to exit
+                // 3. Wait up to 3 seconds for it to exit
                 $start = microtime(true);
-                while (microtime(true) - $start < 2.0) {
+                while (microtime(true) - $start < 3.0) {
                     $status = proc_get_status($this->process);
                     if (!$status['running']) {
                         break;
                     }
-                    usleep(100000); // 100ms
+                    usleep(200000); // 200ms
                 }
 
-                // 3. Fallback to SIGKILL if still running
+                // 4. Force kill group and process if still running
                 if ($status['running']) {
+                    if (function_exists('posix_kill')) {
+                        @posix_kill(-$pid, 9); // SIGKILL to process group
+                    }
                     proc_terminate($this->process, 9);
                 }
             }
