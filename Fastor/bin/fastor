@@ -18,7 +18,7 @@ if (file_exists($devVendor)) {
     exit(1);
 }
 
-const FASTOR_VERSION = '0.1.1';
+const FASTOR_VERSION = '0.1.2';
 
 $args = $argv;
 array_shift($args); // remove script name

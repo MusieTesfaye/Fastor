@@ -24,6 +24,10 @@ class Watcher
             if ($this->checkChanges()) {
                 echo "\nChange detected! Restarting Fastor...\n";
                 $this->stopProcess();
+                
+                // Small delay to ensure OS releases the socket
+                usleep(200000); 
+                
                 $this->startProcess($starter);
             }
         }
@@ -31,9 +35,6 @@ class Watcher
 
     private function startProcess(callable $starter): void
     {
-        // We use pcntl_fork or simple background process?
-        // For simplicity and to avoid pcntl dependency issues in all envs,
-        // we can use proc_open to manage the child server.
         $this->process = $starter();
     }
 
@@ -42,9 +43,23 @@ class Watcher
         if ($this->process && is_resource($this->process)) {
             $status = proc_get_status($this->process);
             if ($status['running']) {
-                // Terminate child and all its sub-processes (Swoole workers)
-                // Sending SIGTERM to the pgid is often cleaner
-                proc_terminate($this->process);
+                // 1. Try SIGTERM first
+                proc_terminate($this->process, 15);
+                
+                // 2. Wait up to 2 seconds for it to exit
+                $start = microtime(true);
+                while (microtime(true) - $start < 2.0) {
+                    $status = proc_get_status($this->process);
+                    if (!$status['running']) {
+                        break;
+                    }
+                    usleep(100000); // 100ms
+                }
+
+                // 3. Fallback to SIGKILL if still running
+                if ($status['running']) {
+                    proc_terminate($this->process, 9);
+                }
             }
             proc_close($this->process);
             $this->process = null;
