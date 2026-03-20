@@ -1,0 +1,198 @@
+#!/usr/bin/env php
+<?php
+
+$binDir = __DIR__;
+
+// 1. Try local vendor (for development in this repo)
+$devVendor = dirname($binDir, 2) . '/vendor/autoload.php';
+// 2. Try package vendor (when installed as a dependency: vendor/fastor/fastor/src/bin/fastor)
+$packageVendor = dirname($binDir, 4) . '/autoload.php';
+
+if (file_exists($devVendor)) {
+    require $devVendor;
+} elseif (file_exists($packageVendor)) {
+    require $packageVendor;
+} else {
+    echo "\n\033[41;37m ERROR \033[0m \033[1mComposer dependencies not found.\033[0m\n";
+    echo "\033[33mPlease run 'composer install' in the project root.\033[0m\n\n";
+    exit(1);
+}
+
+const FASTOR_VERSION = '0.1.1';
+
+$args = $argv;
+array_shift($args); // remove script name
+
+$cmd = $args[0] ?? null;
+
+if ($cmd === 'start' || $cmd === 'run') {
+    $mode = 'http';
+    $file = null; 
+    $host = null;
+    $port = env('PORT') ? (int)env('PORT') : null;
+    $reload = false;
+    $env = env('FASTOR_ENV', 'production');
+
+    // Shift command
+    array_shift($args);
+
+    // 1. Extract named options first
+    $tempArgs = [];
+    $skipNext = false;
+    foreach ($args as $i => $arg) {
+        if ($skipNext) {
+            $skipNext = false;
+            continue;
+        }
+        if ($arg === '--host' && isset($args[$i+1])) {
+            $host = $args[$i+1];
+            $skipNext = true;
+        } elseif ($arg === '--port' && isset($args[$i+1])) {
+            $port = (int)$args[$i+1];
+            $skipNext = true;
+        } elseif ($arg === '--env' && isset($args[$i+1])) {
+            $env = $args[$i+1];
+            $skipNext = true;
+        } elseif ($arg === '--reload' || $arg === '-r') {
+            $reload = true;
+        } else {
+            $tempArgs[] = $arg;
+        }
+    }
+    
+    // Set Environment
+    $_ENV['FASTOR_ENV'] = $env;
+    putenv("FASTOR_ENV=$env");
+
+    // 2. Positional logic for mode and file
+    foreach ($tempArgs as $arg) {
+        if ($arg === 'http' || $arg === 'ws') {
+            $mode = $arg;
+        } elseif (str_ends_with($arg, '.php')) {
+            $file = $arg;
+        }
+    }
+
+    if (!$file) {
+        if (file_exists('main.php')) {
+            $file = 'main.php';
+        } elseif (file_exists('app.php')) {
+            $file = 'app.php';
+        } else {
+            echo "Error: No entry point file found. Please provide a .php file or create main.php\n";
+            exit(1);
+        }
+    }
+
+    if (!file_exists($file)) {
+        echo "Error: $file not found.\n";
+        exit(1);
+    }
+
+    $starter = function() use ($file, $host, $port, $mode, $env) {
+        $php = PHP_BINARY;
+        $execCmd = [$php, __FILE__, 'run-internal', $file, $mode];
+        if ($host) { $execCmd[] = '--host'; $execCmd[] = $host; }
+        if ($port) { $execCmd[] = '--port'; $execCmd[] = (string)$port; }
+        $execCmd[] = '--env'; $execCmd[] = $env;
+        
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => STDOUT,
+            2 => STDERR,
+        ];
+        
+        return proc_open(implode(' ', array_map('escapeshellarg', $execCmd)), $descriptors, $pipes);
+    };
+
+    if ($reload) {
+        $watcher = new \Fastor\HotReload\Watcher(getcwd());
+        $watcher->watch($starter);
+    } else {
+        try {
+            // Pre-configure the app singleton with CLI host/port so
+            // the user's $app->run() call respects CLI flags.
+            app()->configure($host, $port);
+
+            require $file;
+
+            // If the user's file didn't call run() (e.g., they just define routes),
+            // start the server here.
+            if (!app()->isRunning()) {
+                app()->run();
+            }
+        } catch (\Throwable $e) {
+            \Fastor\Console\ErrorRenderer::render($e, $env);
+            exit(1);
+        }
+    }
+} elseif ($cmd === 'run-internal') {
+    // Internal command for hot reload child processes
+    $file = $args[1];
+    $mode = $args[2];
+    $host = null;
+    $port = null;
+    $env = 'production';
+
+    foreach ($args as $i => $arg) {
+        if ($arg === '--host' && isset($args[$i+1])) $host = $args[$i+1];
+        if ($arg === '--port' && isset($args[$i+1])) $port = (int)$args[$i+1];
+        if ($arg === '--env' && isset($args[$i+1])) $env = $args[$i+1];
+    }
+
+    if (!$port) $port = (int)env('PORT', 8000);
+    if (!$host) $host = env('FASTOR_HOST', '0.0.0.0');
+
+    app()->configure($host, $port);
+
+    require $file;
+    if (!app()->isRunning()) {
+        app()->run();
+    }
+} elseif ($cmd === 'init') {
+    if (file_exists('fastor') && !isset($args[1])) {
+        echo "\033[33mFastor CLI already exists in project root.\033[0m (Use 'fastor init --force' to overwrite)\n";
+        exit(0);
+    }
+    
+    $script = <<<'PHP'
+#!/usr/bin/env php
+<?php
+
+// Root proxy for the Fastor CLI tool
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    echo "Error: vendor/autoload.php not found. Run 'composer install'\n";
+    exit(1);
+}
+
+require $autoload;
+
+// Try local Fastor source (for dev) or vendor source
+$bin = file_exists(__DIR__ . '/Fastor/bin/fastor') 
+    ? __DIR__ . '/Fastor/bin/fastor'
+    : __DIR__ . '/vendor/fastor/fastor/Fastor/bin/fastor';
+
+if (!file_exists($bin)) {
+    echo "Error: Fastor binary not found at $bin\n";
+    exit(1);
+}
+
+require $bin;
+PHP;
+    file_put_contents('fastor', $script);
+    chmod('fastor', 0755);
+    echo "\033[32m[SUCCESS] Fastor CLI installed to project root.\033[0m\n";
+    echo "Usage: ./fastor run main.php\n";
+    exit(0);
+} else {
+    echo "\n\033[36mFastor v" . FASTOR_VERSION . "\033[0m\n\n";
+    echo "\033[1mUsage:\033[0m\n";
+    echo "  fastor run [file.php] [--reload|-r] [--host <host>] [--port <port>] [--env <env>]\n\n";
+    echo "\033[1mOptions:\033[0m\n";
+    echo "  --reload, -r    Enable Hot Module Replacement (HMR)\n";
+    echo "  --host          Specify the host (default: 0.0.0.0)\n";
+    echo "  --port          Specify the port (default: 8000)\n";
+    echo "  --env           Specify the environment (default: production)\n\n";
+    exit(1);
+}
