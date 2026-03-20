@@ -30,7 +30,6 @@ if ($cmd === 'start' || $cmd === 'run') {
     $file = null; 
     $host = null;
     $port = env('PORT') ? (int)env('PORT') : null;
-    $reload = false;
     $env = env('FASTOR_ENV', 'production');
 
     // Shift command
@@ -53,8 +52,6 @@ if ($cmd === 'start' || $cmd === 'run') {
         } elseif ($arg === '--env' && isset($args[$i+1])) {
             $env = $args[$i+1];
             $skipNext = true;
-        } elseif ($arg === '--reload' || $arg === '-r') {
-            $reload = true;
         } else {
             $tempArgs[] = $arg;
         }
@@ -108,47 +105,22 @@ if ($cmd === 'start' || $cmd === 'run') {
         return proc_open(implode(' ', array_map('escapeshellarg', $execCmd)), $descriptors, $pipes);
     };
 
-    if ($reload) {
-        $watcher = new \Fastor\HotReload\Watcher(getcwd(), $host, $port);
-        $watcher->watch($starter);
-    } else {
-        try {
-            // Pre-configure the app singleton with CLI host/port so
-            // the user's $app->run() call respects CLI flags.
-            app()->configure($host, $port);
+    try {
+        // Pre-configure the app singleton with CLI host/port so
+        // the user's $app->run() call respects CLI flags.
+        app()->configure($host, $port);
 
-            require $file;
+        require $file;
 
-            // If the user's file didn't call run() (e.g., they just define routes),
-            // start the server here.
-            if (!app()->isRunning()) {
-                app()->run();
-            }
-        } catch (\Throwable $e) {
-            \Fastor\Console\ErrorRenderer::render($e, $env);
-            exit(1);
+        // If the user's file didn't call run() (e.g., they just define routes),
+        // start the server here.
+        if (!app()->isRunning()) {
+            app()->run();
         }
+    } catch (\Throwable $e) {
+        \Fastor\Console\ErrorRenderer::render($e, $env);
+        exit(1);
     }
-} elseif ($cmd === 'run-internal') {
-    // Internal command for hot reload child processes
-    $file = $args[1];
-    $mode = $args[2];
-    $host = null;
-    $port = null;
-    $env = 'production';
-
-    foreach ($args as $i => $arg) {
-        if ($arg === '--host' && isset($args[$i+1])) $host = $args[$i+1];
-        if ($arg === '--port' && isset($args[$i+1])) $port = (int)$args[$i+1];
-        if ($arg === '--env' && isset($args[$i+1])) $env = $args[$i+1];
-    }
-
-    if (!$port) $port = (int)env('PORT', 8000);
-    if (!$host) $host = env('FASTOR_HOST', '0.0.0.0');
-
-    app()->configure($host, $port);
-
-    require $file;
     if (!app()->isRunning()) {
         app()->run();
     }
@@ -191,9 +163,8 @@ PHP;
 } else {
     echo "\n\033[36mFastor v" . FASTOR_VERSION . "\033[0m\n\n";
     echo "\033[1mUsage:\033[0m\n";
-    echo "  fastor run [file.php] [--reload|-r] [--host <host>] [--port <port>] [--env <env>]\n\n";
+    echo "  fastor run [file.php] [--host <host>] [--port <port>] [--env <env>]\n\n";
     echo "\033[1mOptions:\033[0m\n";
-    echo "  --reload, -r    Enable Hot Module Replacement (HMR)\n";
     echo "  --host          Specify the host (default: 0.0.0.0)\n";
     echo "  --port          Specify the port (default: 8000)\n";
     echo "  --env           Specify the environment (default: production)\n\n";

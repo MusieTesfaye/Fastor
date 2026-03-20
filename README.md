@@ -9,7 +9,6 @@ High-performance, async-by-default PHP framework inspired by FastAPI.
 - **Elite Caching**: Integrated Symfony Cache with boot-time warmup and native support for Redis, APCu, and Filesystem.
 - **Pydantic-like Validation**: Extensible, type-safe request/response DTO validation using the `Constraint` system.
 - **Automatic OpenAPI**: Generates Swagger UI and OpenAPI JSON automatically.
-- **Hot Reload**: Integrated watcher for seamless development.
 - **Pluggable Database**: Use any ORM (Eloquent, Cycle) or raw PDO via Dependency Injection.
 
 ## Installation
@@ -50,7 +49,7 @@ $app->run();
 Run your app:
 
 ```bash
-./fastor run main.php --reload
+./fastor run main.php
 ```
 
 ## CLI Usage
@@ -62,7 +61,6 @@ Fastor provides a powerful CLI for running your applications.
 ```
 
 ### Options:
-- `--reload, -r`: Enable Hot Module Replacement (HMR).
 - `--host <host>`: Specify the host (default: `0.0.0.0`).
 - `--port <port>`: Specify the port (default: `8000`).
 - `--env <env>`: Specify the environment (default: `production`).

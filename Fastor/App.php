@@ -390,7 +390,6 @@ HTML;
             'worker_num' => 4,
             'enable_coroutine' => true,
             'task_worker_num' => 4,
-            'enable_reuse_port' => true,
         ]);
 
         $this->server->on('Start', function (SwooleServer $server) use ($host, $port) {
